@@ -4,9 +4,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseConfig {
   // Hardcoded fallback values for mobile deployment
+<<<<<<< HEAD
   static const String _fallbackUrl = 'https://ffnemdxaenxwlgbcppgg.supabase.co';
   static const String _fallbackAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbmVtZHhhZW54d2xnYmNwcGdnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY3NDc0NTEsImV4cCI6MjA3MjMyMzQ1MX0.TvveQw7DgKLdPDk-UAavW1pWc0_7FoZPvIyzCP-Nq1U';
   static const String _fallbackServiceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbmVtZHhhZW54d2xnYmNwcGdnIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1Njc0NzQ1MSwiZXhwIjoyMDcyMzIzNDUxfQ.1Agh9Q4FpRnJGR3FP525yVm0G_lqjMkPC1VRBdoegEg';
+=======
+>>>>>>> 855eb23df949874e99596530a6e5c1834aac4ba0
 
   static String get url {
     // Priority: .env > dart-define > hardcoded fallback (prioritize .env for mobile)
