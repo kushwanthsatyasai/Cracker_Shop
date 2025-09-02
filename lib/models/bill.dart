@@ -172,7 +172,7 @@ class BillItem {
       isActive: true,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      companyType: 'Standard', // Default companyType like add_product_screen.dart
+      companyType: json['company_type']?.toString() ?? 'Standard', // Fetch from DB, fallback to Standard
     );
 
   factory BillItem.fromJson(Map<String, dynamic> json) {

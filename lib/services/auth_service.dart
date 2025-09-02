@@ -62,8 +62,26 @@ class AuthService {
       }
       
       return response;
+    } on AuthException catch (e) {
+      // Handle specific auth errors
+      if (e.message.toLowerCase().contains('invalid login credentials') ||
+          e.message.toLowerCase().contains('invalid password') ||
+          e.message.toLowerCase().contains('email not confirmed') ||
+          e.statusCode == '400') {
+        throw Exception('Invalid credentials');
+      } else if (e.message.toLowerCase().contains('too many requests')) {
+        throw Exception('Too many login attempts. Please try again later.');
+      } else if (e.message.toLowerCase().contains('email not found') ||
+                 e.message.toLowerCase().contains('user not found')) {
+        throw Exception('Invalid credentials');
+      } else {
+        throw Exception('Login failed: ${e.message}');
+      }
     } catch (e) {
-      rethrow;
+      if (e.toString().contains('TimeoutException')) {
+        throw Exception('Login request timed out. Please check your connection.');
+      }
+      throw Exception('Login failed: ${e.toString()}');
     }
   }
 
@@ -89,8 +107,11 @@ class AuthService {
 
       // Fallback: treat the provided username as email (in case username==email)
       return await signInWithEmail(username, password);
-    } catch (e) {
+    } on Exception {
+      // Re-throw our custom exceptions from signInWithEmail
       rethrow;
+    } catch (e) {
+      throw Exception('Login failed: ${e.toString()}');
     }
   }
 
@@ -144,7 +165,6 @@ class AuthService {
           'status': 'active',
           });
     } catch (e) {
-      print('Error creating user profile: $e');
       rethrow;
     }
   }
@@ -152,7 +172,7 @@ class AuthService {
   // Fetch user profile from profiles table
   Future<void> _fetchUserProfile(String userId) async {
     try {
-      final response = await _supabase
+      await _supabase
           .from('profiles')
           .select()
           .eq('id', userId)
@@ -189,7 +209,6 @@ class AuthService {
           .update(updates)
           .eq('id', userId);
     } catch (e) {
-      print('Error updating user profile: $e');
       rethrow;
     }
   }

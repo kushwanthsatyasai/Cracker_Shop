@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:share_plus/share_plus.dart';
+import 'package:provider/provider.dart';
 import 'dart:typed_data';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/bill.dart';
@@ -8,6 +9,7 @@ import '../models/product.dart';
 import '../services/bill_service.dart';
 import '../services/product_service.dart';
 import '../services/pdf_service.dart';
+import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/logout_button.dart';
 
@@ -132,11 +134,35 @@ class _BillDetailsScreenState extends State<BillDetailsScreen> {
         _bill = _bill!.copyWith(paymentMethod: paymentMethod);
       });
       
+      // Get current user for updated_by field
+      final user = Provider.of<AuthProvider>(context, listen: false).user;
+      
+      // Use RPC function to update stock atomically after payment confirmation
+      final stockResult = await ProductService.updateStockAfterBillCompletion(
+        billId: _bill!.id,
+        updatedBy: user?.id,
+      );
+      
+      String message = 'Payment confirmed!';
+      Color backgroundColor = Colors.green;
+      
+      if (stockResult['success'] == true) {
+        message += ' Stock updated successfully (${stockResult['updatedCount']} products updated).';
+      } else {
+        message += ' Warning: Stock update failed - ${stockResult['error']}';
+        backgroundColor = Colors.orange;
+        
+        final errorProducts = stockResult['errorProducts'] as List?;
+        if (errorProducts != null && errorProducts.isNotEmpty) {
+          message += '\nProblematic products: ${errorProducts.join(', ')}';
+        }
+      }
+      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment confirmed! Stock will be updated automatically by database.'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 3),
+          content: Text(message),
+          backgroundColor: backgroundColor,
+          duration: const Duration(seconds: 5),
         ),
       );
     } catch (e) {

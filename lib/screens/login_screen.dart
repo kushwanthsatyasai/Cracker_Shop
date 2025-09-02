@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/database_test.dart';
+import '../widgets/app_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -33,20 +36,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.signIn(
+      final result = await authProvider.signIn(
         _usernameController.text.trim(),
         _passwordController.text.trim(),
       );
 
-      if (success) {
-        // Navigation will be handled by AuthWrapper
-        print('Login successful');
-      } else {
-        if (mounted) {
+      if (mounted) {
+        if (result['success'] == true) {
+          // Navigation will be handled by AuthWrapper
+
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Login failed. Please check your credentials.'),
+            SnackBar(
+              content: Text(result['message'] ?? 'Login successful'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Login failed'),
               backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
             ),
           );
         }
@@ -55,8 +66,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text('Unexpected error: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -66,6 +78,37 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _runDatabaseTests() async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Running database tests... Check console for details'),
+          backgroundColor: Colors.blue,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // Run tests with the current username input
+    final username = _usernameController.text.trim();
+    final results = await DatabaseTest.runAllTests(
+      testUsername: username.isNotEmpty ? username : null,
+    );
+
+    if (mounted) {
+      final allPassed = results['summary']['all_tests_passed'] == true;
+      final message = results['summary']['message'];
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Database Tests: $message'),
+          backgroundColor: allPassed ? Colors.green : Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
     }
   }
 
@@ -121,50 +164,15 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildHeader() {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              children: [
-                Icon(
-                  Icons.star,
-                  size: 32,
-                  color: AppTheme.festiveGold,
-                ),
-                Positioned(
-                  bottom: -2,
-                  right: -2,
-                  child: Icon(
-                    Icons.shopping_bag,
-                    size: 24,
-                    color: AppTheme.primary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'CrackShop Pro',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                background: Paint()
-                  ..shader = LinearGradient(
-                    colors: [
-                      AppTheme.primary,
-                      AppTheme.accent,
-                    ],
-                  ).createShader(const Rect.fromLTWH(0, 0, 200, 30)),
-              ),
-            ),
-          ],
-        ),
+        const AppLogo(size: 40, showText: true),
         const SizedBox(height: 8),
         Text(
           'Festive Billing & Inventory Management',
           style: TextStyle(
             color: AppTheme.mutedForeground,
+            fontSize: 14,
           ),
+          textAlign: TextAlign.center,
         ),
       ],
     );
@@ -226,11 +234,21 @@ class _LoginScreenState extends State<LoginScreen> {
               // Password field
               TextFormField(
                 controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
                   labelText: 'Password',
                   hintText: 'Enter your password',
-                  prefixIcon: Icon(Icons.lock_outlined),
+                  prefixIcon: const Icon(Icons.lock_outlined),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -263,6 +281,20 @@ class _LoginScreenState extends State<LoginScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Debug button (temporary)
+              TextButton(
+                onPressed: _isLoading ? null : _runDatabaseTests,
+                child: const Text(
+                  'Test Database Connection',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey,
+                  ),
+                ),
               ),
             ],
           ),

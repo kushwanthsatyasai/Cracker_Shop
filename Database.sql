@@ -12,8 +12,8 @@ CREATE TABLE public.bill_items (
   total_price numeric NOT NULL,
   created_at timestamp with time zone DEFAULT now(),
   CONSTRAINT bill_items_pkey PRIMARY KEY (id),
-  CONSTRAINT bill_items_bill_id_fkey FOREIGN KEY (bill_id) REFERENCES public.bills(id),
-  CONSTRAINT bill_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id)
+  CONSTRAINT bill_items_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id),
+  CONSTRAINT bill_items_bill_id_fkey FOREIGN KEY (bill_id) REFERENCES public.bills(id)
 );
 CREATE TABLE public.bills (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -41,7 +41,7 @@ CREATE TABLE public.products (
   is_active boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
-  company_type character varying CHECK (company_type::text = ANY (ARRAY['Standard'::character varying, 'Others'::character varying]::text[])),
+  company_type USER-DEFINED CHECK (company_type::text = ANY (ARRAY['Standard'::character varying::text, 'Others'::character varying::text])),
   selling_price numeric CHECK (selling_price > 0::numeric),
   CONSTRAINT products_pkey PRIMARY KEY (id)
 );

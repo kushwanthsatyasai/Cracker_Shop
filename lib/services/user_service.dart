@@ -29,6 +29,26 @@ class UserService {
   }
 
   // Create a new user - FIXED: Use proper admin API
+  // Test admin client connectivity
+  static Future<bool> testAdminClient() async {
+    try {
+      final adminClient = SupabaseClient(
+        SupabaseConfig.url,
+        SupabaseConfig.serviceRoleKey,
+      );
+      
+      // Test a simple query with service role
+      final result = await adminClient
+          .from('profiles')
+          .select('count(*)')
+          .limit(1);
+      
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   static Future<User> createUser({
     required String username,
     required String fullName,
@@ -38,35 +58,199 @@ class UserService {
     required String status,
   }) async {
     try {
-      final serviceRoleKey = SupabaseConfig.serviceRoleKey;
+      // Create admin client for operations
+      final adminClient = SupabaseClient(
+        SupabaseConfig.url,
+        SupabaseConfig.serviceRoleKey,
+      );
+
+      // Step 1: Validate user data using simple RPC
+      final validationResponse = await adminClient.rpc(
+        'create_user_simple',
+        params: {
+          'p_email': email,
+          'p_password': password,
+          'p_username': username,
+          'p_full_name': fullName,
+          'p_role': role,
+          'p_status': status,
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (validationResponse == null) {
+        throw Exception('Validation function returned null response');
+      }
+
+      final validationResult = validationResponse as Map<String, dynamic>;
       
-      if (serviceRoleKey.isNotEmpty && serviceRoleKey.length > 100) {
-        // Try admin method first
-        try {
-          return await _createUserWithAdmin(
+      if (validationResult['success'] != true) {
+        final error = validationResult['error'] ?? 'Validation failed';
+        throw Exception(error);
+      }
+
+      // Step 2: Create auth user using Supabase Auth Admin API
+      final authResponse = await adminClient.auth.admin.createUser(
+        AdminUserAttributes(
+          email: email,
+          password: password,
+          emailConfirm: true,
+          userMetadata: {
+            'username': username,
+            'full_name': fullName,
+          },
+        ),
+      ).timeout(const Duration(seconds: 15));
+
+      if (authResponse.user == null) {
+        throw Exception('Auth user creation failed - user is null');
+      }
+
+      final newUserId = authResponse.user!.id;
+
+      // Step 3: Handle profile creation (trigger might have already created it)
+      // Wait a moment for any triggers to complete
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Check if profile already exists (created by trigger)
+      try {
+        final existingProfile = await adminClient
+            .from('profiles')
+            .select()
+            .eq('id', newUserId)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 5));
+        
+        if (existingProfile != null) {
+          // Update the existing profile with our data
+          final updatedProfile = await adminClient
+              .from('profiles')
+              .update({
+                'username': username,
+                'full_name': fullName,
+                'email': email,
+                'role': role,
+                'status': status,
+                'updated_at': DateTime.now().toIso8601String(),
+              })
+              .eq('id', newUserId)
+              .select()
+              .single()
+              .timeout(const Duration(seconds: 10));
+          
+          return User(
+            id: newUserId,
             username: username,
             fullName: fullName,
             email: email,
-            password: password,
             role: role,
             status: status,
+            createdAt: DateTime.parse(updatedProfile['created_at']),
+            updatedAt: DateTime.parse(updatedProfile['updated_at']),
           );
-        } catch (adminError) {
-          // Admin method failed, fallback to signup
+        } else {
+          // Create new profile
+          final profileData = {
+            'id': newUserId,
+            'username': username,
+            'full_name': fullName,
+            'email': email,
+            'role': role,
+            'status': status,
+            'created_at': DateTime.now().toIso8601String(),
+            'updated_at': DateTime.now().toIso8601String(),
+          };
+
+          final newProfile = await adminClient
+              .from('profiles')
+              .insert(profileData)
+              .select()
+              .single()
+              .timeout(const Duration(seconds: 10));
+          
+          return User(
+            id: newUserId,
+            username: username,
+            fullName: fullName,
+            email: email,
+            role: role,
+            status: status,
+            createdAt: DateTime.parse(newProfile['created_at']),
+            updatedAt: DateTime.parse(newProfile['updated_at']),
+          );
         }
+      } catch (profileError) {
+        // Clean up auth user if profile operations failed
+        try {
+          await adminClient.auth.admin.deleteUser(newUserId);
+        } catch (cleanupError) {
+          // Cleanup failed, but continue with original error
+        }
+        
+        throw Exception('Profile handling failed: $profileError');
       }
-      
-      // Fallback to signup method
-      return await _createUserFallback(
-        username: username,
-        fullName: fullName,
-        email: email,
-        password: password,
-        role: role,
-        status: status,
-      );
     } catch (e) {
       throw Exception('Failed to create user: $e');
+    }
+  }
+
+  // Delete user - removes both auth user and profile
+  static Future<void> deleteUser(String userId) async {
+    try {
+      // Create admin client for operations
+      final adminClient = SupabaseClient(
+        SupabaseConfig.url,
+        SupabaseConfig.serviceRoleKey,
+      );
+
+      // Step 1: Delete from profiles table first (foreign key dependency)
+      await adminClient
+          .from('profiles')
+          .delete()
+          .eq('id', userId)
+          .timeout(const Duration(seconds: 10));
+
+      // Step 2: Delete from auth.users using admin API
+      await adminClient.auth.admin.deleteUser(userId);
+    } catch (e) {
+      throw Exception('Failed to delete user: $e');
+    }
+  }
+
+  // Check if user can be deleted (e.g., not the current user, has no bills, etc.)
+  static Future<Map<String, dynamic>> checkUserDeletion(String userId) async {
+    try {
+      // Get current user to prevent self-deletion
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser?.id == userId) {
+        return {
+          'canDelete': false,
+          'reason': 'Cannot delete your own account',
+        };
+      }
+
+      // Check if user has any bills
+      final bills = await _supabase
+          .from('bills')
+          .select('id')
+          .eq('biller_id', userId)
+          .limit(1);
+
+      if (bills.isNotEmpty) {
+        return {
+          'canDelete': false,
+          'reason': 'User has associated bills and cannot be deleted',
+        };
+      }
+
+      return {
+        'canDelete': true,
+        'reason': 'User can be safely deleted',
+      };
+    } catch (e) {
+      return {
+        'canDelete': false,
+        'reason': 'Error checking user deletion: $e',
+      };
     }
   }
 

@@ -254,13 +254,22 @@ class PDFService {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [
+              pw.Text('Subtotal: '),
+              pw.SizedBox(width: 20),
+              pw.Text('Rs.${bill.subtotal.toStringAsFixed(2)}'),
+            ],
+          ),
+          pw.SizedBox(height: 5),
           if (bill.subtotal != bill.totalAmount) ...[
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.end,
               children: [
-                pw.Text('Subtotal: '),
+                pw.Text('Discount: '),
                 pw.SizedBox(width: 20),
-                pw.Text('Rs.${bill.subtotal.toStringAsFixed(2)}'),
+                pw.Text('Rs.${(bill.subtotal - bill.totalAmount).toStringAsFixed(2)}'),
               ],
             ),
             pw.SizedBox(height: 5),

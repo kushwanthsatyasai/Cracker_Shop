@@ -68,23 +68,36 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Sign in
-  Future<bool> signIn(String username, String password) async {
+  Future<Map<String, dynamic>> signIn(String username, String password) async {
     try {
       _isLoading = true;
       notifyListeners();
       
-      // Add timeout to prevent hanging
-      final response = await _authService.signInWithUsername(username, password)
-          .timeout(const Duration(seconds: 8));
+      // If input looks like an email, sign in with email directly to avoid
+      // profiles lookup (which can be blocked by RLS for anon role)
+      final bool looksLikeEmail = username.contains('@');
+
+      final response = await (
+        looksLikeEmail
+          ? _authService.signInWithEmail(username, password)
+          : _authService.signInWithUsername(username, password)
+      ).timeout(const Duration(seconds: 10));
       
       if (response.user != null) {
         // Don't fetch profile here - let _handleAuthStateChange handle it
         // This prevents double fetching and speeds up login
-        return true;
+        return {'success': true, 'message': 'Login successful'};
       }
-      return false;
+      return {'success': false, 'message': 'Login failed. Please try again.'};
+    } on Exception catch (e) {
+      // Extract the specific error message
+      String errorMessage = e.toString();
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.substring(11); // Remove "Exception: " prefix
+      }
+      return {'success': false, 'message': errorMessage};
     } catch (e) {
-      return false;
+      return {'success': false, 'message': 'An unexpected error occurred. Please try again.'};
     } finally {
       _isLoading = false;
       notifyListeners();

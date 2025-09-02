@@ -9,6 +9,11 @@ class ProductService {
   // Admin client for operations that require elevated privileges
   SupabaseClient? _adminClient;
   
+  // Constructor to initialize static instance
+  ProductService() {
+    _staticInstance = this;
+  }
+  
   SupabaseClient get adminClient {
     if (_adminClient == null) {
       try {
@@ -26,7 +31,7 @@ class ProductService {
   // Test method to check if we can update products
   Future<void> testProductUpdate(String productId) async {
     try {
-      print('🧪 Testing product update permissions for: $productId');
+      //print('🧪 Testing product update permissions for: $productId');
       
       // First try to read the product
       final readResult = await _supabase
@@ -35,7 +40,7 @@ class ProductService {
           .eq('id', productId)
           .single();
       
-      print('📖 Read test successful: ${readResult['name']} - Stock: ${readResult['stock_quantity']}');
+      //print('📖 Read test successful: ${readResult['name']} - Stock: ${readResult['stock_quantity']}');
       
       // Try a dummy update (set stock to current value)
       final currentStock = readResult['stock_quantity'];
@@ -45,12 +50,12 @@ class ProductService {
           .eq('id', productId)
           .select();
       
-      print('✅ Update test successful: $updateResult');
+      //print('✅ Update test successful: $updateResult');
       
     } catch (e) {
-      print('❌ Product update test failed: $e');
+      //print('❌ Product update test failed: $e');
       if (e.toString().contains('row-level security')) {
-        print('🔒 RLS Issue: Current user cannot update products table');
+        //print('🔒 RLS Issue: Current user cannot update products table');
       }
       rethrow;
     }
@@ -88,7 +93,7 @@ class ProductService {
       
       return response.map((json) => Product.fromJson(json)).toList();
     } catch (e) {
-      print('Error getting products by category: $e');
+      //print('Error getting products by category: $e');
       rethrow;
     }
   }
@@ -104,7 +109,7 @@ class ProductService {
       
       return Product.fromJson(response);
     } catch (e) {
-      print('Error getting product by ID: $e');
+      //print('Error getting product by ID: $e');
       return null;
     }
   }
@@ -112,7 +117,7 @@ class ProductService {
   // Create new product
   Future<Product> createProduct(Product product) async {
     try {
-      final response = await _supabase
+      final response = await adminClient
           .from('products')
           .insert(product.toJson())
           .select()
@@ -120,24 +125,55 @@ class ProductService {
       
       return Product.fromJson(response);
     } catch (e) {
-      print('Error creating product: $e');
+
       rethrow;
     }
   }
 
-  // Update product
-  Future<Product> updateProduct(Product product) async {
+  // Create new product from data map (for new products without ID)
+  Future<Product> createProductFromMap(Map<String, dynamic> productData) async {
     try {
-      final response = await _supabase
+      final response = await adminClient
           .from('products')
-          .update(product.toJson())
-          .eq('id', product.id)
+          .insert(productData)
           .select()
           .single();
       
       return Product.fromJson(response);
     } catch (e) {
-      print('Error updating product: $e');
+
+      rethrow;
+    }
+  }
+
+  // Update product
+  Future<Product> updateProduct(dynamic productOrId, [Map<String, dynamic>? updates]) async {
+    try {
+      Map<String, dynamic> updateData;
+      String productId;
+      
+      if (productOrId is Product) {
+        // Full product update
+        updateData = productOrId.toJson();
+        productId = productOrId.id;
+      } else if (productOrId is String && updates != null) {
+        // Partial update with product ID and updates map
+        updateData = updates;
+        productId = productOrId;
+      } else {
+        throw ArgumentError('Invalid arguments for updateProduct');
+      }
+      
+      final response = await adminClient
+          .from('products')
+          .update(updateData)
+          .eq('id', productId)
+          .select()
+          .single();
+      
+      return Product.fromJson(response);
+    } catch (e) {
+      //print('Error updating product: $e');
       rethrow;
     }
   }
@@ -150,7 +186,7 @@ class ProductService {
           .update({'is_active': false})
           .eq('id', id);
     } catch (e) {
-      print('Error deleting product: $e');
+      //print('Error deleting product: $e');
       rethrow;
     }
   }
@@ -174,7 +210,7 @@ class ProductService {
             'notes': reason,
           });
     } catch (e) {
-      print('Error updating stock quantity: $e');
+      //print('Error updating stock quantity: $e');
       rethrow;
     }
   }
@@ -204,7 +240,7 @@ class ProductService {
             'notes': notes,
           });
     } catch (e) {
-      print('Error adding stock: $e');
+      //print('Error adding stock: $e');
       rethrow;
     }
   }
@@ -212,7 +248,7 @@ class ProductService {
   // Remove stock (out movement)
   Future<void> removeStock(String productId, int quantity, String referenceType, String referenceId, String notes) async {
     try {
-      print('🔄 removeStock called: productId=$productId, quantity=$quantity');
+      //print('🔄 removeStock called: productId=$productId, quantity=$quantity');
       
       // Test permissions first
       await testProductUpdate(productId);
@@ -220,26 +256,26 @@ class ProductService {
       // Get current stock
       final product = await getProductById(productId);
       if (product == null) {
-        print('❌ Product not found: $productId');
+        //print('❌ Product not found: $productId');
         throw Exception('Product not found');
       }
       
-      print('📦 Current stock for ${product.name}: ${product.stockQuantity}');
+      //print('📦 Current stock for ${product.name}: ${product.stockQuantity}');
       
       if (product.stockQuantity < quantity) {
-        print('❌ Insufficient stock: required=$quantity, available=${product.stockQuantity}');
+        //print('❌ Insufficient stock: required=$quantity, available=${product.stockQuantity}');
         throw Exception('Insufficient stock: required $quantity, available ${product.stockQuantity}');
       }
       
       final newQuantity = product.stockQuantity - quantity;
-      print('📉 Updating stock: ${product.stockQuantity} -> $newQuantity');
+      //print('📉 Updating stock: ${product.stockQuantity} -> $newQuantity');
       
       // Get current user info for debugging
       final currentUser = _supabase.auth.currentUser;
-      print('👤 Current user: ${currentUser?.id} (${currentUser?.email})');
+      //print('👤 Current user: ${currentUser?.id} (${currentUser?.email})');
       
       // Update product stock with explicit column specification using admin client
-      print('🔄 Executing update query with admin privileges...');
+      //print('🔄 Executing update query with admin privileges...');
       final updateResult = await adminClient
           .from('products')
           .update({
@@ -249,10 +285,10 @@ class ProductService {
           .eq('id', productId)
           .select('id, name, stock_quantity, updated_at');
       
-      print('✅ Product stock update result: $updateResult');
+      //print('✅ Product stock update result: $updateResult');
       
       if (updateResult.isEmpty) {
-        print('⚠️ Update returned empty result - checking if product exists...');
+        //print('⚠️ Update returned empty result - checking if product exists...');
         final existsCheck = await _supabase
             .from('products')
             .select('id, name, stock_quantity')
@@ -262,7 +298,7 @@ class ProductService {
         if (existsCheck == null) {
           throw Exception('Product does not exist: $productId');
         } else {
-          print('🔍 Product exists but update failed. Current state: $existsCheck');
+          //print('🔍 Product exists but update failed. Current state: $existsCheck');
           throw Exception('Stock update failed - no rows affected');
         }
       }
@@ -274,10 +310,10 @@ class ProductService {
           .eq('id', productId)
           .single();
       
-      print('🔍 Verification - Product after update:');
-      print('   Name: ${verifyResult['name']}');
-      print('   Stock: ${verifyResult['stock_quantity']}');
-      print('   Updated: ${verifyResult['updated_at']}');
+      //print('🔍 Verification - Product after update:');
+      //print('   Name: ${verifyResult['name']}');
+      //print('   Stock: ${verifyResult['stock_quantity']}');
+      //print('   Updated: ${verifyResult['updated_at']}');
       
       // Confirm the stock actually changed
       if (verifyResult['stock_quantity'] != newQuantity) {
@@ -285,7 +321,7 @@ class ProductService {
       }
       
       // Create stock movement record using admin client
-      print('🔄 Creating stock movement record...');
+      //print('🔄 Creating stock movement record...');
       final movementResult = await adminClient
           .from('stock_movements')
           .insert({
@@ -298,16 +334,16 @@ class ProductService {
           })
           .select();
       
-      print('✅ Stock movement record created: $movementResult');
-      print('🎯 Stock update completed successfully for ${product.name}');
-      print('   Previous stock: ${product.stockQuantity}');
-      print('   New stock: ${verifyResult['stock_quantity']}');
-      print('   Quantity sold: $quantity');
+      //print('✅ Stock movement record created: $movementResult');
+      //print('🎯 Stock update completed successfully for ${product.name}');
+      //print('   Previous stock: ${product.stockQuantity}');
+      //print('   New stock: ${verifyResult['stock_quantity']}');
+      //print('   Quantity sold: $quantity');
       
     } catch (e) {
-      print('❌ Error removing stock: $e');
-      print('❌ Error type: ${e.runtimeType}');
-      print('❌ Stack trace: ${StackTrace.current}');
+      //print('❌ Error removing stock: $e');
+      //print('❌ Error type: ${e.runtimeType}');
+      //print('❌ Stack trace: ${StackTrace.current}');
       rethrow;
     }
   }
@@ -323,7 +359,7 @@ class ProductService {
       
       return response.map((json) => StockMovement.fromJson(json)).toList();
     } catch (e) {
-      print('Error getting stock movements: $e');
+      //print('Error getting stock movements: $e');
       rethrow;
     }
   }
@@ -340,7 +376,7 @@ class ProductService {
       
       return response.map((json) => Product.fromJson(json)).toList();
     } catch (e) {
-      print('Error searching products: $e');
+      //print('Error searching products: $e');
       rethrow;
     }
   }
@@ -391,7 +427,7 @@ class ProductService {
   // Process stock updates for a completed bill
   Future<void> processStockUpdatesForCompletedBill(String billId) async {
     try {
-      print('🔄 Processing stock updates for completed bill: $billId');
+      //print('🔄 Processing stock updates for completed bill: $billId');
       
       // Get all stock movements for this bill
       final stockMovements = await adminClient
@@ -400,10 +436,10 @@ class ProductService {
           .eq('reference_type', 'bill')
           .eq('reference_id', billId);
       
-      print('📝 Found ${stockMovements.length} stock movements for bill $billId');
+      //print('📝 Found ${stockMovements.length} stock movements for bill $billId');
       
       if (stockMovements.isEmpty) {
-        print('⚠️ No stock movements found for bill $billId');
+        //print('⚠️ No stock movements found for bill $billId');
         return;
       }
       
@@ -427,14 +463,14 @@ class ProductService {
           if (movementType == 'out') {
             // Reduce stock for 'out' movements (sales)
             if (product.stockQuantity < quantity) {
-              print('⚠️ Insufficient stock for ${product.name}: required=$quantity, available=${product.stockQuantity}');
+              //print('⚠️ Insufficient stock for ${product.name}: required=$quantity, available=${product.stockQuantity}');
               failedUpdates.add('${product.name}: Insufficient stock');
               continue;
             }
             
             final newQuantity = product.stockQuantity - quantity;
             
-            print('📦 Updating stock for ${product.name}: ${product.stockQuantity} -> $newQuantity');
+            //print('📦 Updating stock for ${product.name}: ${product.stockQuantity} -> $newQuantity');
             
             // Update product stock using admin client
             await adminClient
@@ -446,13 +482,13 @@ class ProductService {
                 .eq('id', productId);
             
             successfulUpdates.add('${product.name} (-$quantity)');
-            print('✅ Stock reduced for ${product.name}: $quantity units');
+            //print('✅ Stock reduced for ${product.name}: $quantity units');
             
           } else if (movementType == 'in') {
             // Increase stock for 'in' movements (returns, adjustments)
             final newQuantity = product.stockQuantity + quantity;
             
-            print('📦 Updating stock for ${product.name}: ${product.stockQuantity} -> $newQuantity');
+            //print('📦 Updating stock for ${product.name}: ${product.stockQuantity} -> $newQuantity');
             
             // Update product stock using admin client
             await adminClient
@@ -464,35 +500,86 @@ class ProductService {
                 .eq('id', productId);
             
             successfulUpdates.add('${product.name} (+$quantity)');
-            print('✅ Stock increased for ${product.name}: $quantity units');
+            //print('✅ Stock increased for ${product.name}: $quantity units');
           }
           
         } catch (itemError) {
           failedUpdates.add('Movement ${movement['id']}: $itemError');
-          print('❌ Failed to process movement: $itemError');
+          //print('❌ Failed to process movement: $itemError');
         }
       }
       
       // Log summary
-      print('🎯 Stock update summary for bill $billId:');
-      print('   ✅ Successful: ${successfulUpdates.length}');
-      print('   ❌ Failed: ${failedUpdates.length}');
+      //print('🎯 Stock update summary for bill $billId:');
+      //print('   ✅ Successful: ${successfulUpdates.length}');
+      //print('   ❌ Failed: ${failedUpdates.length}');
       
       if (successfulUpdates.isNotEmpty) {
-        print('   Success details: ${successfulUpdates.join(', ')}');
+        //print('   Success details: ${successfulUpdates.join(', ')}');
       }
       
       if (failedUpdates.isNotEmpty) {
-        print('   Failed details: ${failedUpdates.join(', ')}');
+        //print('   Failed details: ${failedUpdates.join(', ')}');
         throw Exception('Some stock updates failed: ${failedUpdates.join(', ')}');
       }
       
     } catch (e) {
-      print('❌ Error processing stock updates for bill $billId: $e');
+      //print('❌ Error processing stock updates for bill $billId: $e');
       rethrow;
     }
   }
   
+  // Static instance for cache management
+  static ProductService? _staticInstance;
+  
+  // Update stock quantities using Supabase RPC (Recommended approach)
+  static Future<Map<String, dynamic>> updateStockAfterBillCompletion({
+    required String billId,
+    String? updatedBy,
+  }) async {
+    try {
+      // Create admin client for RPC call
+      final adminClient = SupabaseClient(
+        SupabaseConfig.url,
+        SupabaseConfig.serviceRoleKey,
+      );
+      
+      final response = await adminClient.rpc(
+        'update_stock_after_bill_completion',
+        params: {
+          'p_bill_id': billId,
+          if (updatedBy != null) 'p_updated_by': updatedBy,
+        },
+      ).timeout(const Duration(seconds: 30));
+
+      if (response == null) {
+        throw Exception('RPC function returned null response');
+      }
+
+      // Parse the JSON response
+      final result = response as Map<String, dynamic>;
+      
+      if (result['success'] == true) {
+        // Clear cache to reflect updated stock quantities
+        _staticInstance?.clearCache();
+        return {
+          'success': true,
+          'message': result['message'] ?? 'Stock updated successfully',
+          'updatedCount': result['updated_count'] ?? 0,
+        };
+      } else {
+        return {
+          'success': false,
+          'error': result['error'] ?? 'Unknown error occurred',
+          'errorProducts': result['error_products'] ?? [],
+          'updatedCount': result['updated_count'] ?? 0,
+        };
+      }
+    } catch (e) {
+      throw Exception('Failed to update stock via RPC: $e');
+    }
+  }
+
   // Clear cached data
   void clearCache() {
     _adminClient = null;

@@ -29,11 +29,6 @@ class Product {
     final rawCompanyType = json['company_type'];
     final resolvedCompanyType = rawCompanyType?.toString() ?? 'Standard';
     
-    // Debug logging to see what's coming from database
-    print('🔍 Product.fromJson: ${json['name']}');
-    print('   Raw company_type from DB: "$rawCompanyType" (${rawCompanyType.runtimeType})');
-    print('   Resolved companyType: "$resolvedCompanyType"');
-    
     return Product(
       id: json['id'] ?? '',
       name: json['name'] ?? '',

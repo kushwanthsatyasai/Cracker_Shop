@@ -6,6 +6,7 @@ import '../services/user_service.dart';
 import '../config/supabase_config.dart';
 import '../utils/responsive_utils.dart';
 import '../widgets/logout_button.dart';
+import '../widgets/app_logo.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -336,6 +337,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     String _selectedRole = 'biller';
     String _selectedStatus = 'active';
     bool _isLoading = false;
+    bool _obscurePassword = true;
 
     showDialog(
       context: context,
@@ -398,11 +400,21 @@ class _DashboardScreenState extends State<DashboardScreen>
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _passwordController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Password',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
                         ),
-                        obscureText: true,
+                        obscureText: _obscurePassword,
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return 'Please enter password';
@@ -528,21 +540,156 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  Future<void> _showDeleteUserConfirmation(User user) async {
+    // First check if user can be deleted
+    final checkResult = await UserService.checkUserDeletion(user.id);
+    
+    if (!checkResult['canDelete']) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(checkResult['reason']),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Show confirmation dialog
+    if (mounted) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Delete User'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Are you sure you want to delete this user?'),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.fullName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text('Username: ${user.username}'),
+                      Text('Email: ${user.email}'),
+                      Text('Role: ${user.role}'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'This action cannot be undone. The user will be permanently removed from the system.',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Delete User'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (confirmed == true) {
+        await _deleteUser(user);
+      }
+    }
+  }
+
+  Future<void> _deleteUser(User user) async {
+    try {
+      // Show loading
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                CircularProgressIndicator(strokeWidth: 2),
+                SizedBox(width: 16),
+                Text('Deleting user...'),
+              ],
+            ),
+            duration: Duration(seconds: 10),
+          ),
+        );
+      }
+
+      // Delete the user
+      await UserService.deleteUser(user.id);
+
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('User "${user.fullName}" deleted successfully'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        // Refresh the data to update the UI
+        _loadData();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete user: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final analytics = _analytics;
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
+        title: const Row(
           children: [
-            Icon(
-              Icons.star,
-              color: Colors.amber[600],
-              size: 24,
-            ),
-            const SizedBox(width: 8),
-            const Text('Admin Dashboard'),
+            AppIcon(size: 28),
+            SizedBox(width: 8),
+            Text('Admin Dashboard'),
           ],
         ),
         backgroundColor: Theme.of(context).colorScheme.primary,
@@ -924,10 +1071,42 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ],
               ),
             ),
-            IconButton(
-              onPressed: () {
-                // TODO: Implement user actions
+            PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'delete' && user != null) {
+                  await _showDeleteUserConfirmation(user);
+                } else if (value == 'edit' && user != null) {
+                  // TODO: Implement edit user functionality
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Edit user functionality coming soon'),
+                      backgroundColor: Colors.blue,
+                    ),
+                  );
+                }
               },
+              itemBuilder: (BuildContext context) => [
+                const PopupMenuItem<String>(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 16),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 16, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Delete', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
               icon: const Icon(Icons.more_vert),
             ),
           ],
